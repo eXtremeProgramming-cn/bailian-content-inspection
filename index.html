@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The X-DashScope-DataInspection header — Content inspection on Alibaba Cloud Model Studio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A documented reading of how content inspection works on Alibaba Cloud Model Studio (DashScope / Bailian): the X-DashScope-DataInspection request header, the values it accepts, what each value means, and how to read the DataInspectionFailed error.">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --border:#30363d; --text:#e6edf3;
+    --muted:#8b949e; --accent:#2f81f7; --accent-2:#a371f7; --code:#1f2630; --gold:#d29922;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#ffffff; --panel:#f6f8fa; --border:#d0d7de; --text:#1f2328;
+           --muted:#57606a; --accent:#0969da; --accent-2:#8250df; --code:#eff1f3; --gold:#9a6700;}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg);color:var(--text);line-height:1.65}
+  .wrap{max-width:820px;margin:0 auto;padding:2rem 1.25rem 5rem}
+  .badge{display:inline-block;font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;
+         color:var(--accent-2);border:1px solid var(--accent-2);border-radius:99px;padding:.18rem .6rem;margin-bottom:1rem}
+  h1{font-size:1.9rem;margin:.2em 0 .15em;line-height:1.25}
+  .sub{color:var(--muted);font-size:1.02rem;margin:0 0 1.6rem}
+  h2{font-size:1.25rem;margin:2.2rem 0 .6rem;padding-top:1.2rem;border-top:1px solid var(--border)}
+  h3{font-size:1.02rem;margin:1.4rem 0 .4rem}
+  p{margin:.6rem 0}
+  a{color:var(--accent)}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.86em;
+       background:var(--code);padding:.1rem .35rem;border-radius:4px}
+  pre{background:var(--code);border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;
+      overflow-x:auto;font-size:.82rem;line-height:1.5}
+  pre code{background:none;padding:0}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1.2rem 1.3rem;margin:1rem 0}
+  .note{border-color:var(--gold)}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.92rem}
+  th,td{border:1px solid var(--border);padding:.5rem .7rem;text-align:left;vertical-align:top}
+  th{background:var(--panel)}
+  td code{white-space:nowrap}
+  ul,ol{margin:.5rem 0;padding-left:1.4rem}
+  li{margin:.35rem 0}
+  .refs{font-size:.92rem}
+  .refs li{margin:.55rem 0}
+  .foot{margin-top:3rem;color:var(--muted);font-size:.85rem;border-top:1px solid var(--border);padding-top:1rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="badge">extremeprogramming-cn</span>
+  <h1>Content inspection on Alibaba Cloud Model Studio</h1>
+  <p class="sub">A close reading of the official documentation: what the <code>X-DashScope-DataInspection</code>
+  request header configures, which values it accepts, what each value means, and how to read the
+  <code>DataInspectionFailed</code> error.</p>
+
+  <h2>About this page</h2>
+  <p>This is an independent reading of Alibaba Cloud's official documentation about
+     <strong>content inspection</strong> on Model Studio (DashScope, also known as 百炼 / Bailian).
+     Agent-style workloads — long prompts, retrieved documents, research material — occasionally trip
+     the platform's content inspection on legitimate input, and the resulting error is confusing if you
+     have never seen it. This page collects, in one place and with links to the official sources, what
+     the platform documents about that mechanism and its configuration.</p>
+  <p>Every factual claim here links to an official Alibaba Cloud page, listed under
+     <a href="#references">References</a> (all accessed 2026-09-20). Where official documents are
+     incomplete or silent, that status is stated plainly rather than papered over.</p>
+
+  <h2>Two layers of content checking</h2>
+  <p>Model Studio applies content checks at two layers, and it is worth keeping them apart because
+     they fail differently:</p>
+  <ul>
+    <li><strong>The model layer.</strong> Each model carries its own compliance behavior. When it declines
+        a request, the HTTP call typically <em>succeeds</em> (HTTP 200) and the response body contains a
+        refusal. This layer is a property of the model and is not configured by the header on this page.</li>
+    <li><strong>The platform layer.</strong> A content-security screening runs in front of the model.
+        When it intercepts, the call fails with <strong>HTTP 400</strong> and an error code of
+        <code>DataInspectionFailed</code> (DashScope-native protocol) or <code>data_inspection_failed</code>
+        (OpenAI-compatible mode). This is the layer the <code>X-DashScope-DataInspection</code> header
+        configures.</li>
+  </ul>
+
+  <h2>The error you may see</h2>
+  <p>On the Anthropic-protocol endpoints the error surfaces as:</p>
+  <pre><code>server error: &lt;400&gt; InternalError.Algo.DataInspectionFailed: Input text data may contain inappropriate content.</code></pre>
+  <p>On the OpenAI-compatible endpoint the same failure looks like:</p>
+  <pre><code>Error code: 400 - {
+    "error": {
+        "message": "Input data may contain inappropriate content.",
+        "type": "data_inspection_failed",
+        "code": "data_inspection_failed"
+    }
+}</code></pre>
+  <p>The official error-code reference lists the family under
+     <code>400-DataInspectionFailed / data_inspection_failed</code> with the messages
+     “Input or output data may contain inappropriate content.”, “Input data may contain inappropriate
+     content.” and “Output data may contain inappropriate content.”, and states the cause: the input or
+     output was intercepted by the content-security layer as suspected sensitive content. The reference's
+     listed remedy is to modify the input and retry. Related documented codes include
+     <code>400-CustomRoleBlocked</code> (blocked by a custom rule) and a pre-inference image check for
+     multimodal input. The content-security page additionally notes that in retrieval-augmented (knowledge-base)
+     scenarios, text retrieved from uploaded documents is injected into the model input and can trigger the
+     same interception.</p>
+  <p>Two things follow from reading these pages together. First, the error is about the
+     <em>platform layer</em>: nothing in it says the model was asked and refused — the request was stopped
+     in front of the model. Second, when the flagged text is retrieved material or an agent's assembled
+     context rather than something the user typed, “modify the input and retry” is not actionable advice,
+     because the content is legitimate and the wording is not really under your control. That is the case
+     the configuration below addresses.</p>
+
+  <h2>The <code>X-DashScope-DataInspection</code> header</h2>
+  <p>The header is set on API requests as a JSON string, for example:
+     <code>-H "X-DashScope-DataInspection: {\"input\": \"cip\", \"output\": \"cip\"}"</code>.
+     The <code>input</code> and <code>output</code> members configure inspection of the request and of the
+     response, respectively. The values that appear in official documentation and official example code:</p>
+  <table>
+    <tr><th>Value</th><th>What it means</th><th>Official source</th></tr>
+    <tr>
+      <td><code>{"input":"cip","output":"cip"}</code></td>
+      <td>Routes the request's input and output through the <strong>AI Guardrail</strong> (安全护栏), a
+          value-added service: it is activated and authorized separately in the console, billed per token,
+          supports configurable policy tags, and logs inspectable results. Requests that fail the guardrail
+          return the 400 error above.</td>
+      <td><a href="https://help.aliyun.com/zh/model-studio/qwen-api-via-dashscope">Text API reference</a>,
+          <a href="https://help.aliyun.com/zh/model-studio/content-security">Content-security page</a></td>
+    </tr>
+    <tr>
+      <td><em>(header not set)</em></td>
+      <td>For Qwen text models, the reference describes the default as <em>no additional inspection</em>
+          beyond the model's own. Note, however, that platform-side screening is observed to run by default
+          in some configurations — notably realtime speech interfaces and hosted third-party models — which
+          is precisely where the error above tends to appear.</td>
+      <td><a href="https://help.aliyun.com/zh/model-studio/qwen-api-via-dashscope">Text API reference</a></td>
+    </tr>
+    <tr>
+      <td><code>{"input":"disable","output":"disable"}</code><br>
+          (flat form <code>disable</code> / <code>enable</code> also exists)</td>
+      <td>Turns the platform-side inspection <strong>off</strong> for the request, separately for input and
+          output. Alibaba's own example code for the realtime speech interface passes
+          <code>"x-dashscope-dataInspection": "disable"</code> for this purpose.</td>
+      <td><a href="https://help.aliyun.com/en/model-studio/qwen-audio-realtime-user-guides">Realtime speech guide</a>
+          (official example code)</td>
+    </tr>
+  </table>
+
+  <div class="card note">
+    <p><strong>Documentation status, stated plainly.</strong> The main text-API reference documents only the
+       <code>cip</code> form and the unset default. The <code>disable</code> value appears in writing in
+       Alibaba's realtime-speech example code, and the gateway accepts the same header on the text endpoints
+       (verified 2026-09-20 against both the OpenAI-compatible and Anthropic-compatible endpoints on
+       <code>dashscope.aliyuncs.com</code>, where the header is accepted and unknown headers are ignored).
+       Production use indicates it suppresses the platform-side inspection that produces
+       <code>DataInspectionFailed</code> on hosted third-party text models. Since it is a per-request header,
+       it can also be enabled selectively — only for the clients and tasks that need it — rather than as an
+       account-wide posture.</p>
+  </div>
+
+  <h2>Setting the header in common clients</h2>
+  <p>The header is ordinary HTTP and can be set anywhere custom request headers are supported.
+     Examples:</p>
+  <h3>curl (OpenAI-compatible endpoint)</h3>
+  <pre><code>curl -X POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions \
+  -H "Authorization: Bearer $DASHSCOPE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H 'X-DashScope-DataInspection: {"input": "disable", "output": "disable"}' \
+  -d '{"model": "...", "messages": [...]}'
+</code></pre>
+  <h3>OpenAI SDK (Python)</h3>
+  <pre><code>completion = client.chat.completions.create(
+    model="...",
+    messages=messages,
+    extra_headers={
+        "X-DashScope-DataInspection": '{"input": "disable", "output": "disable"}'
+    },
+)</code></pre>
+  <h3>Anthropic-protocol clients (e.g. Claude Code)</h3>
+  <p>Claude Code exposes custom request headers through the <code>ANTHROPIC_CUSTOM_HEADERS</code>
+     environment variable, which can be set in the project's <code>.claude/settings.json</code> or
+     <code>settings.local.json</code> under <code>env</code>:</p>
+  <pre><code>{
+  "env": {
+    "ANTHROPIC_CUSTOM_HEADERS": "X-DashScope-DataInspection: {\"input\":\"disable\",\"output\":\"disable\"}"
+  }
+}</code></pre>
+  <h3>DeepSeek Harness (DSH)</h3>
+  <p>DSH provider routes accept a <code>headers</code> map in <code>settings.yaml</code>, next to
+     <code>apiKeyEnv</code> and <code>baseURL</code>. In YAML, quote the value so it stays a string:</p>
+  <pre><code>llm-pi-ai:
+  providers:
+    my-provider:
+      headers:
+        X-DashScope-DataInspection: '{"input":"disable","output":"disable"}'
+</code></pre>
+  <p>The adapters re-read the file on the next request; no restart is needed.</p>
+
+  <h2>Boundaries, and the official alternatives</h2>
+  <ul>
+    <li><strong>What switching this header off does not do.</strong> It configures only the platform layer.
+        The model's own compliance behavior is unaffected: content the model itself declines will still be
+        declined, as an in-response refusal rather than a 400. Turning off platform-side inspection reduces
+        false positives on legitimate material; it is not an all-clear for any content.</li>
+    <li><strong>Compliance-sensitive deployments.</strong> If your use of the platform carries regulatory or
+        organizational content obligations (enterprise, publishing, education at scale), evaluate whether and
+        how to configure inspection before changing it. The guardrail route exists precisely for deployments
+        that need inspection with finer-grained, self-managed policy tags.</li>
+    <li><strong>Official alternatives for false positives.</strong> Alibaba documents a whitelisting process
+        (内容加白): submitting a support ticket with the full error and the scenario, after which reviewed
+        content is added to an exemption list. For recurring false positives on a stable corpus, that is the
+        vendor-supported path; the header is the immediate, per-request path.</li>
+  </ul>
+
+  <h2 id="references">References (official Alibaba Cloud documentation, accessed 2026-09-20)</h2>
+  <ol class="refs">
+    <li>DashScope API reference (text models) — documents <code>X-DashScope-DataInspection</code> and the
+        <code>cip</code> form: <a href="https://help.aliyun.com/zh/model-studio/qwen-api-via-dashscope">help.aliyun.com/zh/model-studio/qwen-api-via-dashscope</a></li>
+    <li>输入输出 AI 安全护栏 (AI Guardrail) — activation, authorization, request-header wiring, billing,
+        knowledge-base interception, whitelisting:
+        <a href="https://help.aliyun.com/zh/model-studio/content-security">help.aliyun.com/zh/model-studio/content-security</a></li>
+    <li>Error codes — the <code>400-DataInspectionFailed / data_inspection_failed</code> family:
+        <a href="https://help.aliyun.com/zh/model-studio/error-code">help.aliyun.com/zh/model-studio/error-code</a></li>
+    <li>Qwen-Audio realtime guide — official example code passing
+        <code>x-dashscope-dataInspection: disable</code>:
+        <a href="https://help.aliyun.com/en/model-studio/qwen-audio-realtime-user-guides">help.aliyun.com/en/model-studio/qwen-audio-realtime-user-guides</a></li>
+  </ol>
+
+  <div class="foot">
+    An independent documentation-reading page by <a href="https://github.com/extremeprogramming-cn">extremeprogramming-cn</a>.
+    Not affiliated with Alibaba Cloud. Corrections welcome via the repository's issue tracker.
+  </div>
+</div>
+</body>
+</html>
