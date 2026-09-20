@@ -9,10 +9,12 @@
   :root{
     --bg:#0d1117; --panel:#161b22; --border:#30363d; --text:#e6edf3;
     --muted:#8b949e; --accent:#2f81f7; --accent-2:#a371f7; --code:#1f2630; --gold:#d29922;
+    --red:#f85149;
   }
   @media (prefers-color-scheme: light){
     :root{ --bg:#ffffff; --panel:#f6f8fa; --border:#d0d7de; --text:#1f2328;
-           --muted:#57606a; --accent:#0969da; --accent-2:#8250df; --code:#eff1f3; --gold:#9a6700;}
+           --muted:#57606a; --accent:#0969da; --accent-2:#8250df; --code:#eff1f3; --gold:#9a6700;
+           --red:#cf222e;}
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -33,6 +35,8 @@
   pre code{background:none;padding:0}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1.2rem 1.3rem;margin:1rem 0}
   .note{border-color:var(--gold)}
+  .warn{border-color:var(--red)}
+  .warn > p:first-child strong{color:var(--red)}
   table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.92rem}
   th,td{border:1px solid var(--border);padding:.5rem .7rem;text-align:left;vertical-align:top}
   th{background:var(--panel)}
@@ -153,6 +157,12 @@
   </div>
 
   <h2>Setting the header in common clients</h2>
+  <div class="card warn">
+    <p><strong>Back up before you edit.</strong> Before modifying a configuration file —
+       <code>settings.yaml</code>, <code>.claude/settings.json</code>, or similar — make a backup
+       copy of it first, in the same folder (for example <code>settings.yaml.bak-20260920-1530</code>).
+       If an edit goes wrong, copying the backup back over the original file undoes it.</p>
+  </div>
   <p>The header is ordinary HTTP and can be set anywhere custom request headers are supported.
      Examples:</p>
   <h3>curl (OpenAI-compatible endpoint)</h3>
